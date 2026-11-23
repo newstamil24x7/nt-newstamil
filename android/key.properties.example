@@ -1,0 +1,6 @@
+# Key properties for Google Play Store release signing
+# Place your release keystore file in /android/app/newstamil-release.jks
+password=YOUR_SECURE_PASSWORD
+keyPassword=YOUR_SECURE_PASSWORD
+keyAlias=newstamil
+storeFile=newstamil-release.jks

@@ -1,0 +1,4 @@
+{
+  "summary": "NewsArticle model representing WordPress post items with JSON parsing, HTML unescaping, image extraction, and serialization.",
+  "updatedAt": "2026-09-14T09:50:42.345755800Z"
+}
