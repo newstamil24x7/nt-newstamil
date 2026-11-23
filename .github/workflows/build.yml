@@ -48,8 +48,10 @@ jobs:
       - name: Accept Android Licenses
         run: yes | flutter doctor --android-licenses || true
 
-      - name: Get Dependencies
-        run: flutter pub get
+      - name: Get Dependencies & Patch ProGuard Compatibility
+        run: |
+          flutter pub get
+          find /home/runner/.pub-cache -name "build.gradle*" -exec sed -i "s/proguard-android\.txt/proguard-android-optimize\.txt/g" {} + || true
 
       - name: Build Release APK (For Direct Phone Testing)
         run: flutter build apk --release --android-skip-build-dependency-validation
