@@ -25,11 +25,21 @@ jobs:
           sed -i 's/id("org.jetbrains.kotlin.android") version ".*"/id("org.jetbrains.kotlin.android") version "2.4.0"/g' android/settings.gradle.kts
           sed -i 's/project.evaluationDependsOn(":app")/\/\/ project.evaluationDependsOn(":app")/g' android/build.gradle.kts
 
-          # 2. Use the pre-installed NDK version on GitHub runner (ZERO download needed)
+          # 2. Use the pre-installed NDK version on GitHub runner
           sed -i 's/.*ndkVersion.*/    ndkVersion = "27.3.13750724"/g' android/app/build.gradle.kts
-          sudo ln -sf /usr/local/lib/android/sdk/ndk/27.3.13750724 /usr/local/lib/android/sdk/ndk/28.2.13676358 2>/dev/null || true
 
-          # 3. Safe memory settings for 7GB GitHub runner
+          # 3. Disable R8 minification to prevent missing class errors
+          sed -i 's/signingConfig = signingConfigs.getByName("debug")/signingConfig = signingConfigs.getByName("debug")\n            isMinifyEnabled = false\n            isShrinkResources = false/g' android/app/build.gradle.kts
+
+          # 4. ProGuard keep rules just in case
+          cat << 'EOF' > android/app/proguard-rules.pro
+          -dontwarn **
+          -dontwarn com.google.android.play.core.**
+          -dontwarn io.flutter.**
+          -keep class io.flutter.** { *; }
+          EOF
+
+          # 5. Safe memory settings for 7GB GitHub runner
           sed -i 's/-Xmx8G/-Xmx4G/g' android/gradle.properties
           sed -i 's/-XX:MaxMetaspaceSize=4G/-XX:MaxMetaspaceSize=1G/g' android/gradle.properties
 
