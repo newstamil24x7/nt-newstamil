@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter_widget_from_html/flutter_widget_from_html.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import '../models/news_article.dart';
 import '../services/bookmark_service.dart';
 import '../theme/app_theme.dart';
@@ -20,11 +23,55 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
   double _fontSize = 16.0;
   bool _isBookmarked = false;
   bool _isPlayingAudio = false;
+  final FlutterTts _flutterTts = FlutterTts();
+  YoutubePlayerController? _ytController;
 
   @override
   void initState() {
     super.initState();
     _checkBookmark();
+    _initTts();
+    _initYoutube();
+  }
+
+  void _initYoutube() {
+    final videoId = widget.article.youtubeVideoId;
+    if (videoId != null && !kIsWeb) {
+      _ytController = YoutubePlayerController(
+        initialVideoId: videoId,
+        flags: const YoutubePlayerFlags(
+          autoPlay: false,
+          mute: false,
+          enableCaption: true,
+        ),
+      );
+    }
+  }
+
+  Future<void> _initTts() async {
+    await _flutterTts.awaitSpeakCompletion(true);
+    _flutterTts.setCompletionHandler(() {
+      if (mounted) {
+        setState(() => _isPlayingAudio = false);
+      }
+    });
+    _flutterTts.setCancelHandler(() {
+      if (mounted) {
+        setState(() => _isPlayingAudio = false);
+      }
+    });
+    _flutterTts.setErrorHandler((_) {
+      if (mounted) {
+        setState(() => _isPlayingAudio = false);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _flutterTts.stop();
+    _ytController?.dispose();
+    super.dispose();
   }
 
   Future<void> _checkBookmark() async {
@@ -61,18 +108,75 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     }
   }
 
-  void _toggleAudioSpeech() {
-    setState(() {
-      _isPlayingAudio = !_isPlayingAudio;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          _isPlayingAudio ? '🔊 ஆடியோ செய்தி ஒலிக்கிறது...' : '⏹️ ஆடியோ நிறுத்தப்பட்டது',
-        ),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+  String _prepareSpeechText() {
+    final raw = widget.article.content.isNotEmpty
+        ? widget.article.content
+        : widget.article.excerpt;
+    final cleanBody = raw
+        .replaceAll(RegExp(r'<script[^>]*>.*?</script>', dotAll: true), ' ')
+        .replaceAll(RegExp(r'<style[^>]*>.*?</style>', dotAll: true), ' ')
+        .replaceAll(RegExp(r'<[^>]*>'), ' ')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#8216;', '‘')
+        .replaceAll('&#8217;', '’')
+        .replaceAll('&#8220;', '“')
+        .replaceAll('&#8221;', '”')
+        .replaceAll(RegExp(r'&\S+?;'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final combined = '${widget.article.title}. $cleanBody';
+    // Android TTS has a ~4000 char single-utterance limit
+    return combined.length > 3500 ? combined.substring(0, 3500) : combined;
+  }
+
+  Future<void> _toggleAudioSpeech() async {
+    if (_isPlayingAudio) {
+      await _flutterTts.stop();
+      if (mounted) {
+        setState(() => _isPlayingAudio = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⏹️ ஆடியோ நிறுத்தப்பட்டது'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      await _flutterTts.setLanguage('ta-IN');
+      await _flutterTts.setSpeechRate(0.48);
+      await _flutterTts.setVolume(1.0);
+      await _flutterTts.setPitch(1.0);
+
+      final textToSpeak = _prepareSpeechText();
+      if (textToSpeak.trim().isEmpty) return;
+
+      if (mounted) {
+        setState(() => _isPlayingAudio = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🔊 ஆடியோ செய்தி ஒலிக்கிறது...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
+      await _flutterTts.speak(textToSpeak);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isPlayingAudio = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('ஆடியோ இயக்க முடியவில்லை. உங்கள் போனில் Google TTS உள்ளதா என சரிபார்க்கவும்.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -142,19 +246,60 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Hero Image
-            AspectRatio(
-              aspectRatio: 16 / 9,
-              child: CachedNetworkImage(
-                imageUrl: widget.article.imageUrl,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(color: Colors.grey.shade200),
-                errorWidget: (context, url, error) => Container(
-                  color: Colors.grey.shade200,
-                  child: const Icon(Icons.image_not_supported_rounded, size: 48),
+            // 1. YouTube Video Player (if embedded YouTube video exists) OR Hero Image
+            if (_ytController != null)
+              Column(
+                children: [
+                  AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: YoutubePlayer(
+                      controller: _ytController!,
+                      showVideoProgressIndicator: true,
+                      progressIndicatorColor: AppTheme.primaryRed,
+                      bottomActions: [
+                        CurrentPosition(),
+                        ProgressBar(isExpanded: true),
+                        RemainingDuration(),
+                        const PlaybackSpeedButton(),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    width: double.infinity,
+                    color: isDark ? AppTheme.darkCard : Colors.grey.shade100,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () async {
+                          final url = Uri.parse('https://www.youtube.com/watch?v=${widget.article.youtubeVideoId}');
+                          if (await canLaunchUrl(url)) {
+                            await launchUrl(url, mode: LaunchMode.externalApplication);
+                          }
+                        },
+                        icon: const Icon(Icons.open_in_new_rounded, size: 16, color: AppTheme.primaryRed),
+                        label: const Text(
+                          'YouTube-ல் பார்க்க',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.primaryRed),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            else
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: CachedNetworkImage(
+                  imageUrl: widget.article.imageUrl,
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) => Container(color: Colors.grey.shade200),
+                  errorWidget: (context, url, error) => Container(
+                    color: Colors.grey.shade200,
+                    child: const Icon(Icons.image_not_supported_rounded, size: 48),
+                  ),
                 ),
               ),
-            ),
 
             Padding(
               padding: const EdgeInsets.all(16.0),
