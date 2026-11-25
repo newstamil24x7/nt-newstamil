@@ -31,15 +31,17 @@ class NewsArticle {
     String rawExcerpt = json['excerpt']?['rendered'] ?? '';
     String cleanExcerpt = _stripHtml(rawExcerpt);
 
-    // 3. Extract Image URL with fallbacks
-    String img = '';
-    try {
-      if (json.containsKey('_embedded') &&
-          json['_embedded']?['wp:featuredmedia'] != null &&
-          (json['_embedded']['wp:featuredmedia'] as List).isNotEmpty) {
-        img = json['_embedded']['wp:featuredmedia'][0]['source_url'] ?? '';
-      }
-    } catch (_) {}
+    // 3. Extract Image URL with fallbacks (supports both WP API and saved bookmarks)
+    String img = (json['imageUrl'] ?? '').toString();
+    if (img.isEmpty) {
+      try {
+        if (json.containsKey('_embedded') &&
+            json['_embedded']?['wp:featuredmedia'] != null &&
+            (json['_embedded']['wp:featuredmedia'] as List).isNotEmpty) {
+          img = json['_embedded']['wp:featuredmedia'][0]['source_url'] ?? '';
+        }
+      } catch (_) {}
+    }
 
     if (img.isEmpty && json['yoast_head_json'] != null) {
       try {
@@ -64,28 +66,34 @@ class NewsArticle {
       img = 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&auto=format&fit=crop';
     }
 
-    // 4. Extract Category Name
-    String cat = 'செய்திகள்';
-    try {
-      if (json.containsKey('_embedded') &&
-          json['_embedded']?['wp:term'] != null &&
-          (json['_embedded']['wp:term'] as List).isNotEmpty) {
-        final termList = json['_embedded']['wp:term'][0];
-        if (termList is List && termList.isNotEmpty) {
-          cat = termList[0]?['name'] ?? 'செய்திகள்';
+    // 4. Extract Category Name (supports both WP API and saved bookmarks)
+    String cat = (json['categoryName'] ?? '').toString();
+    if (cat.isEmpty) {
+      cat = 'செய்திகள்';
+      try {
+        if (json.containsKey('_embedded') &&
+            json['_embedded']?['wp:term'] != null &&
+            (json['_embedded']['wp:term'] as List).isNotEmpty) {
+          final termList = json['_embedded']['wp:term'][0];
+          if (termList is List && termList.isNotEmpty) {
+            cat = termList[0]?['name'] ?? 'செய்திகள்';
+          }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
 
-    // 5. Author Name
-    String author = 'NewsTamil';
-    try {
-      if (json.containsKey('_embedded') &&
-          json['_embedded']?['author'] != null &&
-          (json['_embedded']['author'] as List).isNotEmpty) {
-        author = json['_embedded']['author'][0]?['name'] ?? 'NewsTamil';
-      }
-    } catch (_) {}
+    // 5. Author Name (supports both WP API and saved bookmarks)
+    String author = (json['authorName'] ?? '').toString();
+    if (author.isEmpty) {
+      author = 'NewsTamil';
+      try {
+        if (json.containsKey('_embedded') &&
+            json['_embedded']?['author'] != null &&
+            (json['_embedded']['author'] as List).isNotEmpty) {
+          author = json['_embedded']['author'][0]?['name'] ?? 'NewsTamil';
+        }
+      } catch (_) {}
+    }
 
     return NewsArticle(
       id: json['id'] ?? 0,
@@ -114,13 +122,13 @@ class NewsArticle {
     };
   }
 
-  // Extract YouTube ID if article contains embedded YouTube video or short
+  // Extract YouTube ID if article contains embedded YouTube video, short, or live stream
   String? get youtubeVideoId {
     final exp = RegExp(
-      r'(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=|shorts\/)|youtu\.be\/)([\w-]{11})',
+      r'(?:youtube(?:-nocookie)?\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live|shorts)\/|.*[?&]v=)|youtu\.be\/)([\w-]{11})',
       caseSensitive: false,
     );
-    final match = exp.firstMatch(content);
+    final match = exp.firstMatch(content) ?? exp.firstMatch(excerpt);
     if (match != null && match.groupCount >= 1) {
       return match.group(1);
     }
