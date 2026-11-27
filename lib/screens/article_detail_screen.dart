@@ -5,7 +5,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:flutter_widget_from_html/flutter_widget_from_html.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../models/news_article.dart';
 import '../services/bookmark_service.dart';
 import '../theme/app_theme.dart';
@@ -37,12 +37,14 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
   void _initYoutube() {
     final videoId = widget.article.youtubeVideoId;
     if (videoId != null && !kIsWeb) {
-      _ytController = YoutubePlayerController(
-        initialVideoId: videoId,
-        flags: const YoutubePlayerFlags(
-          autoPlay: false,
+      _ytController = YoutubePlayerController.fromVideoId(
+        videoId: videoId,
+        autoPlay: false,
+        params: const YoutubePlayerParams(
+          showControls: true,
           mute: false,
-          enableCaption: true,
+          showFullscreenButton: true,
+          strictRelatedVideos: true,
         ),
       );
     }
@@ -70,7 +72,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
   @override
   void dispose() {
     _flutterTts.stop();
-    _ytController?.dispose();
+    _ytController?.close();
     super.dispose();
   }
 
@@ -250,19 +252,9 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
             if (_ytController != null)
               Column(
                 children: [
-                  AspectRatio(
+                  YoutubePlayer(
+                    controller: _ytController!,
                     aspectRatio: 16 / 9,
-                    child: YoutubePlayer(
-                      controller: _ytController!,
-                      showVideoProgressIndicator: true,
-                      progressIndicatorColor: AppTheme.primaryRed,
-                      bottomActions: [
-                        CurrentPosition(),
-                        ProgressBar(isExpanded: true),
-                        RemainingDuration(),
-                        const PlaybackSpeedButton(),
-                      ],
-                    ),
                   ),
                   Container(
                     width: double.infinity,
