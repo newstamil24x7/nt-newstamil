@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import '../models/news_article.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
@@ -26,13 +26,13 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
   void initState() {
     super.initState();
     if (!kIsWeb) {
-      _controller = YoutubePlayerController(
-        initialVideoId: liveVideoId,
-        flags: const YoutubePlayerFlags(
-          autoPlay: true,
-          isLive: true,
+      _controller = YoutubePlayerController.fromVideoId(
+        videoId: liveVideoId,
+        autoPlay: true,
+        params: const YoutubePlayerParams(
+          showControls: true,
           mute: false,
-          enableCaption: false,
+          showFullscreenButton: true,
         ),
       );
     }
@@ -51,7 +51,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
 
   @override
   void dispose() {
-    _controller?.dispose();
+    _controller?.close();
     super.dispose();
   }
 
@@ -89,15 +89,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
               child: _controller != null
                   ? YoutubePlayer(
                       controller: _controller!,
-                      showVideoProgressIndicator: true,
-                      progressIndicatorColor: AppTheme.primaryRed,
-                      topActions: const [],
-                      bottomActions: [
-                        CurrentPosition(),
-                        ProgressBar(isExpanded: true),
-                        RemainingDuration(),
-                        const PlaybackSpeedButton(),
-                      ],
+                      aspectRatio: 16 / 9,
                     )
                   : Container(
                       color: Colors.black87,
